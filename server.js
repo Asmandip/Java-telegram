@@ -56,13 +56,12 @@ async function ensureSettings() {
 // webhook route (Telegram will POST updates here)
 if (bot) {
   app.post(`/bot${process.env.TELEGRAM_TOKEN}`, (req, res) => {
-    try {
-      bot.processUpdate(req.body);
-      res.sendStatus(200);
-    } catch (e) {
+    console.log('Webhook update received:', req.body); // লগ করার জন্য, প্রয়োজনমতো রাখো বা মুছে ফেলো
+    res.sendStatus(200);  // সাথে সাথেই 200 OK রেসপন্স পাঠাও
+
+    bot.processUpdate(req.body).catch(e => {
       console.error('bot.processUpdate error:', e);
-      res.sendStatus(500);
-    }
+    });
   });
 }
 
