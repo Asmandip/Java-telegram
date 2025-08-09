@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Bot Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin:auto; }
+    button { padding:8px 12px; margin:6px; }
+    .status { padding:10px; border:1px solid #ddd; margin-bottom:12px; }
+    pre { background:#f6f6f6; padding:10px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>Bitget Bot Dashboard</h1>
+  <div class="status" id="status">Loading status...</div>
+  <button onclick="control('enable')">Enable System</button>
+  <button onclick="control('disable')">Disable System</button>
+  <button onclick="testSignal()">Send Test Signal</button>
+  <h2>Prices (sample)</h2>
+  <button onclick="loadPrices()">Load Prices</button>
+  <pre id="prices">No data</pre>
+
+  <script>
+    async function loadStatus() {
+      const res = await fetch('/api/status');
+      const j = await res.json();
+      document.getElementById('status').innerText = JSON.stringify(j, null, 2);
+    }
+    async function control(action) {
+      const res = await fetch('/api/control', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({action})});
+      const j = await res.json();
+      alert('Result: ' + JSON.stringify(j));
+      loadStatus();
+    }
+    async function testSignal() {
+      const res = await fetch('/test-signal');
+      const txt = await res.text();
+      alert(txt);
+    }
+    async function loadPrices() {
+      const res = await fetch('/api/prices');
+      const j = await res.json();
+      document.getElementById('prices').innerText = JSON.stringify(j, null, 2);
+    }
+    loadStatus();
+  </script>
+</body>
+</html>
