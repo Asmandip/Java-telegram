@@ -33,3 +33,6 @@ app.get('/api/signals', async (req, res) => {
 });
 
 app.listen(10000, () => console.log("✅ Server running on port 10000"));
+const { monitorLoop } = require('./monitor');
+// after DB connected and bot ready
+monitorLoop().catch(e => console.error('monitor start err', e));
