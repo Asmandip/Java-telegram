@@ -1,3 +1,10 @@
+// MongoDB Connection
+const mongoose = require('mongoose');
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => console.log("✅ MongoDB Connected from Bot"))
+  .catch(err => console.error("❌ MongoDB Error:", err));
 const TelegramBot = require('node-telegram-bot-api');
 const { TELEGRAM_TOKEN, CHAT_ID } = require('./config');
 
