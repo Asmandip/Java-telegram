@@ -1,15 +1,6 @@
-/**
- * scanner.js
- * Rate-limit safe Bitget futures scanner (CommonJS)
- * - 3m candles
- * - RSI(14), EMA(9,21), ATR(14), Volume spike
- * - requires CONFIRMATIONS_REQUIRED matches (default 3)
- * - posts candidate to /signal-candidate
- */
-
+// scanner.js
 require('dotenv').config();
-const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
-const fs = require('fs');
+const fetch = (...args) => import('node-fetch').then(m=>m.default(...args));
 
 const LOCAL = process.env.LOCAL_SERVER || 'http://localhost:10000';
 const TF_MINUTES = parseInt(process.env.TF_MINUTES || '3', 10);
@@ -23,11 +14,10 @@ const MIN_CANDLES = 100;
 let symbolCache = { ts: 0, list: [] };
 let running = true;
 
-// ---------- indicators ----------
+// indicators
 function sma(arr, n) {
   if (!arr || arr.length < n) return null;
-  const slice = arr.slice(-n);
-  return slice.reduce((a,b)=>a+b,0)/n;
+  return arr.slice(-n).reduce((a,b)=>a+b,0)/n;
 }
 function emaFromArray(arr, n) {
   if (!arr || arr.length < n) return null;
@@ -36,7 +26,7 @@ function emaFromArray(arr, n) {
   for (let i=n;i<arr.length;i++) ema = arr[i]*k + ema*(1-k);
   return ema;
 }
-function rsiFromCloses(closes, period=14){
+function rsiFromCloses(closes, period=14) {
   if (!closes || closes.length < period+1) return null;
   let gains=0, losses=0;
   for (let i=closes.length-period;i<closes.length;i++){
@@ -47,7 +37,7 @@ function rsiFromCloses(closes, period=14){
   const rs = (gains/period)/(losses/period);
   return 100 - (100/(1+rs));
 }
-function atrFromOHLC(arr, period=14){
+function atrFromOHLC(arr, period=14) {
   if (!arr || arr.length < period+1) return null;
   const trs=[];
   for (let i=1;i<arr.length;i++){
@@ -58,7 +48,7 @@ function atrFromOHLC(arr, period=14){
   return slice.reduce((a,b)=>a+b,0)/slice.length;
 }
 
-// ---------- Bitget helpers ----------
+// fetch futures symbols with caching
 async function fetchFuturesSymbolsCached(){
   if (symbolCache.list.length && (Date.now() - symbolCache.ts) < SYMBOL_CACHE_TTL_MS) return symbolCache.list;
   let list = [];
@@ -66,10 +56,10 @@ async function fetchFuturesSymbolsCached(){
     'https://api.bitget.com/api/mix/v1/market/tickers',
     'https://api.bitget.com/api/spot/v1/market/tickers'
   ];
-  for (const url of tryUrls){
+  for (const url of tryUrls) {
     try {
-      const r = await fetch(url);
-      const j = await r.json();
+      const res = await fetch(url, { timeout: 15000 });
+      const j = await res.json();
       if (j && j.data && Array.isArray(j.data) && j.data.length) {
         list = j.data.map(x=>x.symbol).filter(s=>s && s.toUpperCase().endsWith('USDT')).slice(0, SYMBOL_FETCH_LIMIT);
         break;
@@ -81,22 +71,25 @@ async function fetchFuturesSymbolsCached(){
   return list;
 }
 
-async function fetchCandles(symbol, limit=300){
+// fetch candles tries multiple endpoints and normalizes
+async function fetchCandles(symbol, limit=300) {
   const tryUrls = [
     `https://api.bitget.com/api/mix/v1/market/candles?symbol=${symbol}&granularity=${TF_MINUTES*60}&limit=${limit}`,
     `https://api.bitget.com/api/spot/v1/market/candles?symbol=${symbol}&limit=${limit}`,
     `https://api.bitget.com/api/spot/v1/market/candles?symbol=${symbol}&bar=${TF_MINUTES}m&limit=${limit}`
   ];
-  for (const url of tryUrls){
+  for (const url of tryUrls) {
     try {
       const r = await fetch(url, { timeout: 15000 });
       const txt = await r.text();
       const j = JSON.parse(txt);
       if (!j) continue;
       let rows = j.data || j || [];
-      if (!Array.isArray(rows) || rows.length === 0) continue;
+      if (!Array.isArray(rows) || !rows.length) continue;
       const parsed = rows.map(item=>{
-        if (Array.isArray(item)) return { time: item[0], open: parseFloat(item[1]), high: parseFloat(item[2]), low: parseFloat(item[3]), close: parseFloat(item[4]), vol: parseFloat(item[5]) };
+        if (Array.isArray(item)) {
+          return { time: item[0], open: parseFloat(item[1]), high: parseFloat(item[2]), low: parseFloat(item[3]), close: parseFloat(item[4]), vol: parseFloat(item[5]) };
+        }
         const o = parseFloat(item.o ?? item.open ?? item[1]);
         const h = parseFloat(item.h ?? item.high ?? item[2]);
         const l = parseFloat(item.l ?? item.low ?? item[3]);
@@ -105,15 +98,13 @@ async function fetchCandles(symbol, limit=300){
         return { time: item.t ?? item.time ?? item[0], open: o, high: h, low: l, close: c, vol: v };
       }).filter(Boolean);
       if (parsed.length >= MIN_CANDLES) return parsed;
-    } catch (e) {
-      // try next url
-    }
+    } catch (e) { /* try next */ }
   }
   return null;
 }
 
-// ---------- analyze ----------
-async function analyzeSymbol(symbol){
+// analyze symbol for confirmations
+async function analyzeSymbol(symbol) {
   try {
     const candles = await fetchCandles(symbol, 300);
     if (!candles || candles.length < MIN_CANDLES) return null;
@@ -160,7 +151,8 @@ async function analyzeSymbol(symbol){
   }
 }
 
-async function postCandidate(candidate){
+// post candidate to server
+async function postCandidate(candidate) {
   try {
     await fetch(`${LOCAL}/signal-candidate`, {
       method: 'POST',
@@ -173,17 +165,24 @@ async function postCandidate(candidate){
   }
 }
 
-async function scanLoop(){
-  while (running){
-    const symbols = await fetchFuturesSymbolsCached();
-    for (const sym of symbols.slice(0, SYMBOL_FETCH_LIMIT)){
-      try {
-        const cand = await analyzeSymbol(sym);
-        if (cand && cand.confirmations && cand.confirmations.length >= CONF_REQ){
-          await postCandidate(cand);
+async function scanLoop() {
+  console.log('Scanner started — TF:', TF_MINUTES, 'min, interval:', SCAN_INTERVAL_MS);
+  while (running) {
+    try {
+      const symbols = await fetchFuturesSymbolsCached();
+      for (const sym of symbols.slice(0, SYMBOL_FETCH_LIMIT)) {
+        try {
+          const cand = await analyzeSymbol(sym);
+          if (cand && cand.confirmations && cand.confirmations.length >= CONF_REQ) {
+            await postCandidate(cand);
+          }
+        } catch (inner) {
+          // ignore symbol-specific errors
         }
-      } catch (e){}
-      await new Promise(r=>setTimeout(r, PER_SYMBOL_DELAY_MS));
+        await new Promise(r=>setTimeout(r, PER_SYMBOL_DELAY_MS));
+      }
+    } catch (e) {
+      console.error('scanLoop error', e.message || e);
     }
     await new Promise(r=>setTimeout(r, SCAN_INTERVAL_MS));
   }
@@ -192,5 +191,4 @@ async function scanLoop(){
 process.on('SIGINT', ()=>{ running = false; process.exit(0); });
 process.on('SIGTERM', ()=>{ running = false; process.exit(0); });
 
-console.log('Scanner starting — TF:', TF_MINUTES, 'min, interval:', SCAN_INTERVAL_MS);
 scanLoop().catch(err => { console.error('scanner fatal', err); process.exit(1); });
