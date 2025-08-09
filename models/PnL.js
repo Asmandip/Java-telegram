@@ -1,9 +1,12 @@
-// models/PnL.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const PnLSchema = new mongoose.Schema({
-  date: { type: String }, // YYYY-MM-DD
-  value: Number
+const pnlSchema = new mongoose.Schema({
+  tradeId: String,
+  pair: String,
+  entry: Number,
+  exit: Number,
+  pnl: Number,
+  createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('PnL', PnLSchema);
+export default mongoose.model('PnL', pnlSchema);
