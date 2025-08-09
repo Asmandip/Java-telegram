@@ -1,122 +1,74 @@
+// server.js
+require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const path = require('path');
-const connectDB = require('./db');
-const { PORT, FRONTEND_URL, NODE_ENV, TELEGRAM_TOKEN, CHAT_ID } = require('./config');
-const bot = require('./bot');
-const { fetchSymbolTicker, fetchAllTickers } = require('./bitgetService');
+const fetch = require('node-fetch');
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
+app.use(express.json());
 app.use(cors());
-app.use(bodyParser.json());
 
-// In-memory control state (for dashboard)
-let systemEnabled = true;
+// Telegram Bot Init
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: false });
 
-// Connect DB
-connectDB();
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB সংযুক্ত হয়েছে'))
+  .catch(err => console.error('❌ MongoDB তে সমস্যা:', err));
 
-// Root health check
+// Home Route (Fix "Cannot GET /")
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', env: NODE_ENV || 'development', timestamp: new Date().toISOString() });
+  res.send(`
+    <h1>🚀 Bitget Crypto Bot চলছে</h1>
+    <p>ড্যাশবোর্ড দেখতে যান: <a href="/dashboard">Dashboard</a></p>
+  `);
 });
 
-// Serve dashboard static files
-app.use('/dashboard', express.static(path.join(__dirname, 'dashboard')));
+// Dashboard Route
+app.get('/dashboard', (req, res) => {
+  res.send(`
+    <h1>📊 Bot Dashboard</h1>
+    <ul>
+      <li>Bot Status: ✅ Running</li>
+      <li>MongoDB: ✅ Connected</li>
+      <li>Telegram Chat ID: ${process.env.CHAT_ID}</li>
+      <li>Frontend URL: ${process.env.FRONTEND_URL}</li>
+    </ul>
+  `);
+});
 
-// Test signal (GET) — useful for browser trigger
-app.get('/test-signal', async (req, res) => {
+// Webhook Route
+app.post(`/webhook/${process.env.TELEGRAM_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// Test Send Message Route
+app.get('/send-test', async (req, res) => {
   try {
-    if (!systemEnabled) return res.status(403).send('System disabled');
-    const message = `🚀 TEST SIGNAL\nPair: BTC/USDT\nType: LONG\nEntry: 68000\nTarget: 68500\nStop Loss: 67800\nConfidence: 99%`;
-    await bot.sendMessage(CHAT_ID, message);
-    // optionally: save to DB (left for bot code)
-    res.send('✅ টেস্ট সিগনাল পাঠানো হয়েছে');
+    await bot.sendMessage(process.env.CHAT_ID, "✅ টেস্ট মেসেজ পাঠানো হয়েছে!");
+    res.send("✅ টেস্ট মেসেজ পাঠানো হয়েছে");
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error sending test signal');
+    res.status(500).send("❌ মেসেজ পাঠানো যায়নি");
   }
 });
 
-// Webhook endpoint (POST)
-app.post('/webhook/:token', async (req, res) => {
+// All Crypto Prices Route
+app.get('/crypto-prices', async (req, res) => {
   try {
-    if (!systemEnabled) return res.status(403).json({ error: 'system_disabled' });
-    const token = req.params.token;
-    // basic auth: ensure token matches TELEGRAM_TOKEN for safety (you can replace with dedicated webhook token)
-    if (!token || !token.includes(TELEGRAM_TOKEN.split(':')[0])) {
-      // Note: in production use a separate secure webhook token
-      console.warn('Webhook token mismatch for', token);
-    }
-
-    const payload = req.body || {};
-    // expected payload fields: pair,type,entry,target,stopLoss,confidence
-    const pair = payload.pair || payload.symbol || 'UNKNOWN';
-    const type = payload.type || 'LONG';
-    const entry = payload.entry || payload.price || 0;
-    const target = payload.target || 0;
-    const stopLoss = payload.stopLoss || payload.sl || 0;
-    const confidence = payload.confidence || payload.conf || 0;
-
-    const message = `🚀 SIGNAL\nPair: ${pair}\nType: ${type}\nEntry: ${entry}\nTarget: ${target}\nStop Loss: ${stopLoss}\nConfidence: ${confidence}%`;
-    await bot.sendMessage(CHAT_ID, message);
-
-    // respond quickly
-    res.json({ ok: true, received: true });
+    const response = await fetch('https://api.bitget.com/api/v2/market/tickers?productType=umcbl');
+    const data = await response.json();
+    res.json(data.data);
   } catch (err) {
-    console.error('Webhook error', err);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ error: '❌ প্রাইস লোড করতে সমস্যা' });
   }
 });
 
-// API: Get status for dashboard
-app.get('/api/status', (req, res) => {
-  res.json({
-    service: 'bitget-crypto-bot',
-    live: true,
-    systemEnabled,
-    NODE_ENV,
-    timestamp: new Date().toISOString()
-  });
+// Start Server
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 সার্ভার চালু হয়েছে পোর্ট ${PORT} তে`);
+  console.log(`🔗 ড্যাশবোর্ড: http://localhost:${PORT}/dashboard`);
 });
-
-// API: Control system (enable/disable)
-app.post('/api/control', (req, res) => {
-  const { action } = req.body;
-  if (action === 'enable') systemEnabled = true;
-  else if (action === 'disable') systemEnabled = false;
-  else return res.status(400).json({ error: 'invalid_action' });
-  res.json({ ok: true, systemEnabled });
-});
-
-// API: fetch a single symbol ticker (proxy to bitgetService)
-app.get('/api/price/:symbol', async (req, res) => {
-  try {
-    const symbol = req.params.symbol.toUpperCase();
-    const data = await fetchSymbolTicker(symbol);
-    res.json({ ok: true, symbol, data });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// API: fetch many tickers
-app.get('/api/prices', async (req, res) => {
-  try {
-    const data = await fetchAllTickers();
-    res.json({ ok: true, data });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-const port = PORT || 10000;
-app.listen(port, () => {
-  console.log(`🚀 সার্ভার চালু হয়েছে পোর্ট ${port} তে`);
-  console.log(`🔗 ড্যাশবোর্ড: http://localhost:${port}/dashboard/`);
-});
-
-module.exports = app;
