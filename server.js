@@ -1,79 +1,56 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const fetch = require('node-fetch');
-require('dotenv').config();
+import express from "express";
+import fetch from "node-fetch";
+import dotenv from "dotenv";
+import { MongoClient } from "mongodb";
 
+dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
-// MongoDB Connect
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}).then(() => console.log("✅ MongoDB Connected"))
-  .catch(err => console.error("❌ MongoDB Error:", err));
+// MongoDB connection
+const mongoClient = new MongoClient(process.env.MONGO_URI);
+await mongoClient.connect();
+const db = mongoClient.db("asman_trade_logs");
 
-// Mongo Schemas
-const SignalSchema = new mongoose.Schema({
-    time: String,
-    symbol: String,
-    type: String,
-    entry: Number,
-    target: Number,
-    sl: Number
-});
-const PnLSchema = new mongoose.Schema({
-    date: String,
-    value: Number
+app.use(express.json());
+
+// Root route
+app.get("/", (req, res) => {
+  res.send("🚀 AsmanDip Java Telegram Bot Server Running...");
 });
 
-const Signal = mongoose.model('Signal', SignalSchema);
-const PnL = mongoose.model('PnL', PnLSchema);
+// Example API: Send Telegram Message
+app.post("/send-signal", async (req, res) => {
+  try {
+    const { pair, rsi } = req.body;
 
-// Middleware
-app.use(express.static('public'));
-
-// 1. Bot Status API
-app.get('/api/bot-status', (req, res) => {
-    // এখানে তোমার বটের লাইভ স্ট্যাটাস ডেটা চেক করবে
-    // ধরলাম বট সবসময় চলছে
-    res.json({ status: 'Running' });
-});
-
-// 2. Live Crypto Prices API
-app.get('/api/prices', async (req, res) => {
-    try {
-        let coins = ['BTCUSDT', 'ETHUSDT', 'PIUSDT', 'VERTUSDT'];
-        let prices = [];
-        for (let coin of coins) {
-            let r = await fetch(`https://api.bitget.com/api/v2/market/ticker?symbol=${coin}`);
-            let d = await r.json();
-            prices.push({
-                symbol: coin,
-                price: parseFloat(d.data.last).toFixed(2)
-            });
-        }
-        res.json(prices);
-    } catch (err) {
-        console.error(err);
-        res.json([]);
-    }
-});
-
-// 3. Signal History API
-app.get('/api/signals', async (req, res) => {
-    let data = await Signal.find().sort({ _id: -1 }).limit(20);
-    res.json(data);
-});
-
-// 4. PnL Data API
-app.get('/api/pnl', async (req, res) => {
-    let data = await PnL.find().sort({ date: 1 });
-    res.json({
-        dates: data.map(d => d.date),
-        values: data.map(d => d.value)
+    // Save to MongoDB
+    await db.collection("signals").insertOne({
+      pair,
+      rsi,
+      time: new Date()
     });
+
+    // Send to Telegram
+    const message = `📢 Signal Alert\nPair: ${pair}\nRSI: ${rsi}\nTime: ${new Date().toLocaleString()}`;
+    const telegramURL = `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}/sendMessage`;
+
+    await fetch(telegramURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: process.env.CHAT_ID,
+        text: message
+      })
+    });
+
+    res.status(200).json({ success: true, message: "Signal sent to Telegram" });
+  } catch (err) {
+    console.error("Error sending signal:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// Start Server
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
