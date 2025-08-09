@@ -59,6 +59,7 @@ async function connectDB() {
 }
 
 // ----------------- Helper: ensure settings doc -----------------
+const Settings = require("./models/Settings");
 async function ensureSettings() {
   if (!Settings) return;
   const one = await Settings.findOne();
