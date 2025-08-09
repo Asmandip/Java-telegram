@@ -152,6 +152,6 @@ app.post('/api/scan-toggle', async (req, res) => {
 
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔗 Webhook route: /bot<TOKEN>`);
+    console.log(`🔗 Webhook route: /bot${process.env.TELEGRAM_TOKEN}`);
   });
 })();
