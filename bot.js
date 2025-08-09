@@ -1,4 +1,25 @@
-// MongoDB Connection
+
+const Signal = require('./models/Signal');
+const PnL = require('./models/PnL');
+
+async function saveSignal(symbol, type, entry, target, sl) {
+    const signal = new Signal({
+        time: new Date().toLocaleString(),
+        symbol,
+        type,
+        entry,
+        target,
+        sl
+    });
+    await signal.save();
+    console.log(`📊 Signal Saved: ${symbol} - ${type}`);
+}
+
+async function savePnL(date, value) {
+    const pnl = new PnL({ date, value });
+    await pnl.save();
+    console.log(`💰 PnL Saved: ${value} on ${date}`);
+}// MongoDB Connection
 const mongoose = require('mongoose');
 mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
