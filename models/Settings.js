@@ -1,17 +1,14 @@
-import mongoose from 'mongoose';
+// models/Settings.js
+const mongoose = require("mongoose");
 
 const settingsSchema = new mongoose.Schema({
-  leverage: { type: Number, default: 5 },
-  stopLossPercent: { type: Number, default: 1 },
-  riskReward: { type: Number, default: 1.3 },
-  timeframe: { type: String, default: '3m' },
   autoTrade: { type: Boolean, default: false },
-  indicators: {
-    rsi: { type: Boolean, default: true },
-    ema: { type: Boolean, default: true },
-    atr: { type: Boolean, default: true },
-    volume: { type: Boolean, default: true }
-  }
+  riskPercentage: { type: Number, default: 1 },
+  leverage: { type: Number, default: 5 },
+  takeProfit: { type: Number, default: 3 },
+  stopLoss: { type: Number, default: 1 },
+  pairs: { type: [String], default: [] },
+  lastUpdated: { type: Date, default: Date.now }
 });
 
-export default mongoose.model('Settings', settingsSchema);
+module.exports = mongoose.model("Settings", settingsSchema);
