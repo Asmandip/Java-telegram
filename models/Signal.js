@@ -1,12 +1,17 @@
-import mongoose from 'mongoose';
+// models/Signal.js
+const mongoose = require('mongoose');
 
-const signalSchema = new mongoose.Schema({
+const SignalSchema = new mongoose.Schema({
   pair: String,
+  symbol: String,
   type: String,
   price: Number,
-  confidence: Number,
+  confirmations: [String],
   indicators: Object,
-  createdAt: { type: Date, default: Date.now }
+  status: { type: String, default: 'candidate' }, // candidate, confirmed, executed, rejected
+  createdAt: { type: Date, default: Date.now },
+  executedAt: Date,
+  execResult: Object
 });
 
-export default mongoose.model('Signal', signalSchema);
+module.exports = mongoose.model('Signal', SignalSchema);
