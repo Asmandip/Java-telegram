@@ -13,9 +13,23 @@ if (!TOKEN) {
   console.error('❌ TELEGRAM_TOKEN missing in env. Bot will not start.');
 }
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+// Detect environment: Webhook for production (Render), polling for local
+let bot;
+if (process.env.USE_POLLING === 'true') {
+  bot = new TelegramBot(TOKEN, { polling: true });
+  console.log('🤖 Bot started in polling mode.');
+} else {
+  bot = new TelegramBot(TOKEN, { polling: false });
+  const url = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL;
+  if (!url) {
+    console.error('❌ WEBHOOK_URL or RENDER_EXTERNAL_URL is required for webhook mode.');
+  } else {
+    bot.setWebHook(`${url}/bot${TOKEN}`);
+    console.log(`🤖 Bot webhook set to ${url}/bot${TOKEN}`);
+  }
+}
 
-// build candidate message (Markdown) + inline keyboard
+// Build candidate message (Markdown) + inline keyboard
 function buildCandidateMessage(doc) {
   const confs = (doc.confirmations && doc.confirmations.length) ? doc.confirmations.join(', ') : 'N/A';
   const price = doc.price || (doc.indicators && doc.indicators.price) || 'n/a';
@@ -33,7 +47,7 @@ function buildCandidateMessage(doc) {
   return { text, opts };
 }
 
-// send candidate to configured chat
+// Send candidate to configured chat
 async function sendCandidate(doc) {
   try {
     if (!CHAT_ID) {
@@ -58,7 +72,7 @@ bot.on('callback_query', async (query) => {
       return;
     }
 
-    const chatId = query.message && query.message.chat ? query.message.chat.id : CHAT_ID;
+    const chatId = query.message?.chat?.id || CHAT_ID;
 
     const doc = await Signal.findById(id);
     if (!doc) {
@@ -87,18 +101,16 @@ bot.on('callback_query', async (query) => {
       await doc.save();
       await bot.answerCallbackQuery(query.id, { text: 'Confirmed — executing...' });
 
-      // If AUTO_TRADE env is true, this path is same; else still executes because user clicked.
       try {
         if (typeof openPosition !== 'function') {
           await bot.sendMessage(chatId, '⚠️ Execution module not available (openPosition missing). Operation aborted.');
           return;
         }
-        const position = await openPosition(doc, /* accountUsd */ 1000);
-        // position should be a mongoose doc or plain object
-        const pid = position && position._id ? position._id : (position.id || 'sim-' + Date.now());
-        const entry = position.entry || position.entryPrice || doc.price;
-        const sl = position.sl;
-        const tp = position.tp;
+        const position = await openPosition(doc, 1000);
+        const pid = position?._id || position?.id || `sim-${Date.now()}`;
+        const entry = position?.entry || position?.entryPrice || doc.price;
+        const sl = position?.sl;
+        const tp = position?.tp;
         await bot.sendMessage(chatId, `🔔 Position opened (id: ${pid})\nSymbol: ${position.symbol || doc.pair || doc.symbol}\nSide: ${position.side || doc.type}\nEntry: ${entry}\nSL: ${sl}\nTP: ${tp}`);
       } catch (err) {
         console.error('Execution error:', err);
@@ -114,16 +126,14 @@ bot.on('callback_query', async (query) => {
   }
 });
 
-// basic commands
+// Basic commands
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, '🤖 Bot online — ready for signals.');
 });
 
 bot.onText(/\/auto (on|off)/, async (msg, match) => {
   const mode = match[1];
-  // NOTE: environment var won't change; this just informs. For persistent toggle, update Settings model via /api/settings
   await bot.sendMessage(msg.chat.id, `Auto-trade toggle requested: ${mode}. To persist changes, use dashboard or update settings in DB.`);
 });
 
-// export
 module.exports = { bot, sendCandidate };
