@@ -1,15 +1,12 @@
-// models/Signal.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const SignalSchema = new mongoose.Schema({
-  symbol: { type: String, required: true },
-  side: { type: String, enum: ['BUY','SELL'], required: true },
+const signalSchema = new mongoose.Schema({
+  pair: String,
+  type: String,
   price: Number,
-  confirmations: [String],
-  time: { type: Date, default: Date.now },
-  status: { type: String, enum: ['candidate','confirmed','executed','rejected'], default: 'candidate' },
-  executedAt: Date,
-  execResult: Object
+  confidence: Number,
+  indicators: Object,
+  createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Signal', SignalSchema);
+export default mongoose.model('Signal', signalSchema);
