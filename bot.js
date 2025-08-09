@@ -26,3 +26,18 @@ bot.onText(/\/trade (.+)/, async (msg, match) => {
 });
 
 export default bot;
+// inside bot callback handler when confirm_exec clicked
+const { openPosition } = require('./utils/trade');
+
+if (action === 'confirm_exec') {
+  doc.status = 'confirmed';
+  await doc.save();
+  await bot.answerCallbackQuery(query.id, { text: 'Confirmed — executing...' });
+
+  try {
+    const pos = await openPosition(doc, /*accountUsd*/ 1000);
+    await bot.sendMessage(CHAT_ID, `🔔 Position opened (id: ${pos._id})\nSymbol: ${pos.symbol}\nEntry: ${pos.entry}\nSL: ${pos.sl}\nTP: ${pos.tp}`);
+  } catch (err) {
+    await bot.sendMessage(CHAT_ID, `❌ Execution failed: ${err.message}`);
+  }
+}
