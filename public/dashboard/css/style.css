@@ -1,0 +1,20 @@
+:root{
+  --bg:#0f1724; --card:#0b1220; --accent:#38bdf8; --muted:#94a3b8; --text:#e6eef6;
+}
+*{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+body{margin:0;background:linear-gradient(180deg,#071025 0%,#081426 100%);color:var(--text);min-height:100vh;}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid rgba(255,255,255,0.03)}
+h1{margin:0;font-size:20px}
+#status-bar span{margin-right:12px;color:var(--muted);font-size:13px}
+#controls button{margin-left:8px;padding:8px 12px;border-radius:8px;background:var(--card);border:1px solid rgba(255,255,255,0.03);color:var(--text)}
+main{display:grid;grid-template-columns:1fr 420px;gap:18px;padding:20px}
+.card{background:rgba(255,255,255,0.03);padding:14px;border-radius:10px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+.card.wide{grid-column:1 / span 2}
+table{width:100%;border-collapse:collapse}
+table th, table td{padding:8px;text-align:left;font-size:13px;border-bottom:1px dashed rgba(255,255,255,0.03)}
+#activity{height:200px;overflow:auto;background:transparent;padding:8px;font-size:13px;color:var(--muted)}
+.hidden{display:none}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center}
+.modal-content{background:var(--card);padding:18px;border-radius:10px;width:320px}
+input[type="text"],input[type="number"]{width:100%;padding:8px;margin-top:6px;margin-bottom:10px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text)}
+button{cursor:pointer}
