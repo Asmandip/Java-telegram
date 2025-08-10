@@ -15,15 +15,13 @@ const PORT = process.env.PORT || 10000;
 const Signal = require('./models/Signal');
 const Settings = require('./models/Settings');
 
-// bot (webhook-ready)
+// modules
 const botModule = require('./bot'); // exports { bot, sendCandidate }
 const bot = botModule?.bot;
-
-// scanner & monitor
 const scanner = require('./scanner'); // exports startScanner, stopScanner, isRunning
-const monitor = require('./monitor'); // exports monitorLoop, startPositionMonitor
+const monitor = require('./monitor'); // exports monitorLoop
 
-// connect DB
+// MongoDB connect
 async function connectDB() {
   const uri = process.env.MONGO_URI;
   if (!uri) {
@@ -39,7 +37,7 @@ async function connectDB() {
   }
 }
 
-// ensure settings doc
+// ensure one settings doc
 async function ensureSettings() {
   try {
     const s = await Settings.findOne();
@@ -53,19 +51,20 @@ async function ensureSettings() {
   }
 }
 
-// webhook route (Telegram will POST updates here)
+// webhook route for Telegram (if bot created)
 if (bot) {
   app.post(`/bot${process.env.TELEGRAM_TOKEN}`, (req, res) => {
-    console.log('Webhook update received:', req.body); // লগ করার জন্য, প্রয়োজনমতো রাখো বা মুছে ফেলো
-    res.sendStatus(200);  // সাথে সাথেই 200 OK রেসপন্স পাঠাও
-
-    bot.processUpdate(req.body).catch(e => {
+    try {
+      bot.processUpdate(req.body);
+      res.sendStatus(200);
+    } catch (e) {
       console.error('bot.processUpdate error:', e);
-    });
+      res.sendStatus(500);
+    }
   });
 }
 
-// signal-candidate route (scanner -> server)
+// scanner -> server candidate route
 app.post('/signal-candidate', async (req, res) => {
   try {
     const cand = req.body;
@@ -82,7 +81,6 @@ app.post('/signal-candidate', async (req, res) => {
       createdAt: new Date()
     });
 
-    // notify bot
     if (botModule?.sendCandidate) {
       try { await botModule.sendCandidate(doc); } catch (e) { console.error('sendCandidate err:', e); }
     }
@@ -93,7 +91,7 @@ app.post('/signal-candidate', async (req, res) => {
   }
 });
 
-// API endpoints for dashboard / control
+// API endpoints (dashboard control)
 app.get('/api/status', async (req, res) => {
   res.json({
     db: mongoose.connection.readyState === 1,
@@ -117,7 +115,6 @@ app.post('/api/settings', async (req, res) => {
   res.json(updated);
 });
 
-// toggle scanner
 app.post('/api/scan-toggle', async (req, res) => {
   const action = req.body?.action;
   if (action === 'start' || (!action && !scanner.isRunning())) {
@@ -129,7 +126,7 @@ app.post('/api/scan-toggle', async (req, res) => {
   }
 });
 
-// start server
+// Start server
 (async () => {
   await connectDB();
   await ensureSettings();
@@ -142,15 +139,13 @@ app.post('/api/scan-toggle', async (req, res) => {
     console.warn('monitor start warning:', e.message || e);
   }
 
-  // start scanner automatically if env true OR settings.scannerEnabled
-  const startScannerEnv = (process.env.START_SCANNER === 'true');
-  if (startScannerEnv) {
-    await scanner.startScanner();
-    console.log('Scanner auto-started by env');
+  // optionally auto-start scanner if env set
+  if (process.env.START_SCANNER === 'true') {
+    try { await scanner.startScanner(); console.log('Scanner auto-started from env'); } catch(e){}
   }
 
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔗 Webhook route: /bot${process.env.TELEGRAM_TOKEN}`);
+    console.log(`🔗 Webhook route: /bot<TOKEN>`);
   });
 })();
