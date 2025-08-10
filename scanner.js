@@ -1,6 +1,7 @@
-// scanner.js - rate-limit safe scanner, posts to /signal-candidate
+// scanner.js - rate-limit safe scanner (Milestone A)
 require('dotenv').config();
 const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+
 const LOCAL = process.env.LOCAL_SERVER || process.env.RENDER_EXTERNAL_URL || 'http://localhost:10000';
 const TF_MINUTES = parseInt(process.env.TF_MINUTES || '3', 10);
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || '60000', 10);
@@ -139,7 +140,7 @@ async function analyzeSymbol(symbol) {
       time: new Date().toISOString()
     };
   } catch (e) {
-    console.error('analyzeSymbol err:', e.message || e);
+    console.error('analyzeSymbol err:', e);
     return null;
   }
 }
@@ -153,7 +154,7 @@ async function postCandidate(candidate) {
     });
     console.log(`[POST] ${candidate.symbol} ${candidate.side}`);
   } catch (e) {
-    console.error('postCandidate err:', e.message || e);
+    console.error('postCandidate err:', e);
   }
 }
 
@@ -177,7 +178,7 @@ async function startScanner() {
           await new Promise(r => setTimeout(r, PER_SYMBOL_DELAY_MS));
         }
       } catch (e) {
-        console.error('scanLoop error:', e.message || e);
+        console.error('scanLoop error:', e);
       }
       await new Promise(r => setTimeout(r, SCAN_INTERVAL_MS));
     }
