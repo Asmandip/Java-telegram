@@ -1,4 +1,4 @@
-// utils/trade.js
+// utils/trade.js - paper-mode trading helper
 require('dotenv').config();
 const Position = require('../models/Position');
 const Signal = require('../models/Signal');
@@ -37,7 +37,6 @@ async function placeSimulatedOrder(signalDoc, accountUsd = 1000) {
 }
 
 async function placeLiveOrder(signalDoc) {
-  // implement Bitget signed order here when ready
   throw new Error('Live order not implemented. Keep PAPER_MODE=true.');
 }
 
@@ -63,9 +62,7 @@ async function closePosition(posId, closePrice, reason = 'manual') {
   await pos.save();
 
   if (PnL) {
-    try {
-      await PnL.create({ tradeId: pos._id, pair: pos.symbol, entry: pos.entry, exit: closePrice, pnl: pnlUsd });
-    } catch (e) { /* ignore */ }
+    try { await PnL.create({ tradeId: pos._id, pair: pos.symbol, entry: pos.entry, exit: closePrice, pnl: pnlUsd }); } catch (e) {}
   }
   return pos;
 }
