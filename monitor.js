@@ -1,11 +1,11 @@
-// monitor.js
+// monitor.js - position watcher
 require('dotenv').config();
-const fetch = (...args) => import('node-fetch').then(m=>m.default(...args));
+const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
 const Position = require('./models/Position');
 const { closePosition } = require('./utils/trade');
 
 const POLL = parseInt(process.env.POSITION_POLL_INTERVAL_MS || '5000', 10);
-const TRAIL_TRIGGER_PCT = parseFloat(process.env.TRAIL_TRIGGER_PCT || '0.5'); // 50% of TP distance
+const TRAIL_TRIGGER_PCT = parseFloat(process.env.TRAIL_TRIGGER_PCT || '0.5');
 
 async function getMarkPrice(symbol) {
   const tryUrls = [
@@ -34,17 +34,10 @@ async function monitorLoop() {
         try {
           const mark = await getMarkPrice(pos.symbol);
           if (!mark) continue;
+
           if (pos.side === 'BUY') {
-            if (mark <= pos.sl) {
-              console.log('SL hit (BUY) for', pos.symbol, mark);
-              await closePosition(pos._id, mark, 'SL');
-              continue;
-            }
-            if (mark >= pos.tp) {
-              console.log('TP hit (BUY) for', pos.symbol, mark);
-              await closePosition(pos._id, mark, 'TP');
-              continue;
-            }
+            if (mark <= pos.sl) { await closePosition(pos._id, mark, 'SL'); continue; }
+            if (mark >= pos.tp) { await closePosition(pos._id, mark, 'TP'); continue; }
             const profitFromEntry = (mark - pos.entry) / pos.entry;
             const tpDistance = (pos.tp - pos.entry) / pos.entry;
             if (tpDistance > 0 && profitFromEntry >= (TRAIL_TRIGGER_PCT * tpDistance)) {
@@ -52,16 +45,8 @@ async function monitorLoop() {
               if (pos.sl < newSl) { pos.sl = newSl; await pos.save(); console.log('Moved SL to breakeven:', pos._id); }
             }
           } else {
-            if (mark >= pos.sl) {
-              console.log('SL hit (SELL) for', pos.symbol, mark);
-              await closePosition(pos._id, mark, 'SL');
-              continue;
-            }
-            if (mark <= pos.tp) {
-              console.log('TP hit (SELL) for', pos.symbol, mark);
-              await closePosition(pos._id, mark, 'TP');
-              continue;
-            }
+            if (mark >= pos.sl) { await closePosition(pos._id, mark, 'SL'); continue; }
+            if (mark <= pos.tp) { await closePosition(pos._id, mark, 'TP'); continue; }
             const profitFromEntry = (pos.entry - mark) / pos.entry;
             const tpDistance = (pos.entry - pos.tp) / pos.entry;
             if (tpDistance > 0 && profitFromEntry >= (TRAIL_TRIGGER_PCT * tpDistance)) {
