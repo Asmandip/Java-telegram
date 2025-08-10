@@ -193,3 +193,59 @@ async function stopScanner() {
 function isRunning() { return running; }
 
 module.exports = { startScanner, stopScanner, isRunning };
+// scanner.js (modified excerpt)
+const strategyRegistry = require('./strategies/registry');
+const Settings = require('./models/Settings');
+
+async function getActiveStrategyModule() {
+  // prefer Settings.activeStrategy, fallback to registry.getActive()
+  try {
+    const s = await Settings.findOne();
+    const name = s?.activeStrategy || strategyRegistry.getActive();
+    if (!name) return null;
+    return strategyRegistry.getModule(name);
+  } catch (e) {
+    console.warn('getActiveStrategyModule err', e);
+    return strategyRegistry.getModule(strategyRegistry.getActive());
+  }
+}
+
+async function scanMarket() {
+  const resultCandidates = [];
+  const symbols = await fetchFuturesSymbolsCached();
+  const toScan = symbols.slice(0, SYMBOL_FETCH_LIMIT);
+  const strat = await getActiveStrategyModule();
+  const settings = await Settings.findOne() || {};
+
+  for (const sym of toScan) {
+    try {
+      const candles = await fetchCandles(sym, 300);
+      if (!candles) continue;
+
+      // strategy decides
+      if (strat && typeof strat.evaluate === 'function') {
+        const cand = await strat.evaluate(sym, candles, settings);
+        if (cand && cand.side) {
+          // augment candidate with indicators/time
+          cand.strategy = cand.strategy || strat.name || 'unknown';
+          // map to expected shape
+          await postCandidate({
+            symbol: cand.symbol || sym,
+            side: cand.side,
+            price: cand.price || candles[candles.length-1].close,
+            confirmations: cand.confirmations || [],
+            indicators: { score: cand.score, reason: cand.reason, raw: cand },
+            time: cand.time || new Date().toISOString()
+          });
+        }
+      } else {
+        // fallback: old analyzeSymbol if no strat loaded
+        const cand = await analyzeSymbol(sym);
+        if (cand) postCandidate(cand);
+      }
+    } catch (e) {
+      console.error('scan symbol error', sym, e.message || e);
+    }
+    await new Promise(r => setTimeout(r, PER_SYMBOL_DELAY_MS));
+  }
+}
