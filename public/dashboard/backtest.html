@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Backtest — Dashboard</title>
+  <link rel="stylesheet" href="/dashboard/css/style.css"/>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div style="padding:16px;">
+    <h2>Backtest Runner</h2>
+    <div>
+      <label>Symbol: <input id="bt-symbol" value="BTCUSDT"/></label>
+      <label>Timeframe (min): <input id="bt-timeframe" value="3" type="number"/></label>
+      <label>Strategy: <select id="bt-strategy"></select></label>
+      <label>Initial Capital: <input id="bt-capital" value="1000" type="number"/></label>
+      <button id="bt-run">Run Backtest</button>
+    </div>
+
+    <div id="bt-status" style="margin-top:12px;"></div>
+
+    <div id="charts" style="display:flex;gap:12px;margin-top:16px;">
+      <div id="chart-equity" style="width:600px;height:300px;background:#fff;"></div>
+      <div id="chart-candles" style="width:800px;height:300px;background:#fff;"></div>
+    </div>
+
+    <h3>Trades</h3>
+    <table id="bt-trades" style="width:100%;border-collapse:collapse;">
+      <thead><tr><th>Entry</th><th>Exit</th><th>Side</th><th>PnL</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="/dashboard/js/backtest.js"></script>
+</body>
+</html>
