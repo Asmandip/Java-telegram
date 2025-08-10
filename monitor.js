@@ -1,4 +1,4 @@
-// monitor.js - position watcher
+// monitor.js - watches open positions and closes on TP/SL; trailing to BE
 require('dotenv').config();
 const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
 const Position = require('./models/Position');
@@ -54,10 +54,10 @@ async function monitorLoop() {
               if (pos.sl > newSl) { pos.sl = newSl; await pos.save(); console.log('Moved SL to breakeven (SELL):', pos._id); }
             }
           }
-        } catch (inner) { console.error('monitor inner err:', inner); }
+        } catch (inner) { console.error('monitor inner err', inner); }
       }
     } catch (e) {
-      console.error('monitorLoop error:', e);
+      console.error('monitorLoop error', e);
     }
     await new Promise(r => setTimeout(r, POLL));
   }
