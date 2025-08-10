@@ -1,8 +1,8 @@
-// utils/trade.js - paper-mode trading helper
+// utils/trade.js
 require('dotenv').config();
 const Position = require('../models/Position');
 const Signal = require('../models/Signal');
-const PnL = (() => { try { return require('../models/PnL'); } catch(e){ return null; } })();
+const PnL = require('../models/PnL');
 
 const PAPER_MODE = (process.env.PAPER_MODE !== 'false');
 const LEVERAGE = parseFloat(process.env.LEVERAGE || '5');
@@ -37,13 +37,12 @@ async function placeSimulatedOrder(signalDoc, accountUsd = 1000) {
 }
 
 async function placeLiveOrder(signalDoc) {
-  // Live order placeholder - implement Bitget signed REST call here if you want live trading.
-  throw new Error('Live order not implemented. Keep PAPER_MODE=true.');
+  throw new Error('Live order not implemented. Set PAPER_MODE=true or implement Bitget adapter.');
 }
 
 async function openPosition(signalDoc, accountUsd = 1000) {
-  if (PAPER_MODE) return await placeSimulatedOrder(signalDoc, accountUsd);
-  return await placeLiveOrder(signalDoc, accountUsd);
+  if (PAPER_MODE) return placeSimulatedOrder(signalDoc, accountUsd);
+  return placeLiveOrder(signalDoc, accountUsd);
 }
 
 async function closePosition(posId, closePrice, reason = 'manual') {
@@ -62,9 +61,7 @@ async function closePosition(posId, closePrice, reason = 'manual') {
   pos.execMeta.closeReason = reason;
   await pos.save();
 
-  if (PnL) {
-    try { await PnL.create({ tradeId: pos._id, pair: pos.symbol, entry: pos.entry, exit: closePrice, pnl: pnlUsd }); } catch (e) {}
-  }
+  await PnL.create({ tradeId: pos._id, pair: pos.symbol, entry: pos.entry, exit: closePrice, pnl: pnlUsd });
   return pos;
 }
 
