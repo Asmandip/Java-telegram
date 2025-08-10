@@ -1,6 +1,4 @@
-// models/Position.js
 const mongoose = require('mongoose');
-
 const PositionSchema = new mongoose.Schema({
   signalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Signal' },
   symbol: String,
@@ -17,5 +15,4 @@ const PositionSchema = new mongoose.Schema({
   pnlUsd: Number,
   execMeta: Object
 });
-
 module.exports = mongoose.model('Position', PositionSchema);
