@@ -1,4 +1,4 @@
-// scanner.js
+// scanner.js - rate-limit safe scanner, posts to /signal-candidate
 require('dotenv').config();
 const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
 const LOCAL = process.env.LOCAL_SERVER || process.env.RENDER_EXTERNAL_URL || 'http://localhost:10000';
