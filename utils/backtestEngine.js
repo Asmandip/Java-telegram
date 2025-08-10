@@ -149,4 +149,4 @@ function computeMaxDrawdown(equitySeries = [], startVal = 1000) {
   return maxDd;
 }
 
-module
+module.exports = { runBacktest };
