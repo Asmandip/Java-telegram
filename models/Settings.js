@@ -1,6 +1,4 @@
-// models/Settings.js
 const mongoose = require('mongoose');
-
 const SettingsSchema = new mongoose.Schema({
   autoTrade: { type: Boolean, default: (process.env.AUTO_TRADE === 'true') },
   scannerEnabled: { type: Boolean, default: false },
@@ -9,5 +7,4 @@ const SettingsSchema = new mongoose.Schema({
   rr: { type: Number, default: parseFloat(process.env.RR || '1.3') },
   lastUpdated: { type: Date, default: Date.now }
 });
-
 module.exports = mongoose.model('Settings', SettingsSchema);
