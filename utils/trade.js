@@ -37,6 +37,7 @@ async function placeSimulatedOrder(signalDoc, accountUsd = 1000) {
 }
 
 async function placeLiveOrder(signalDoc) {
+  // Live order placeholder - implement Bitget signed REST call here if you want live trading.
   throw new Error('Live order not implemented. Keep PAPER_MODE=true.');
 }
 
