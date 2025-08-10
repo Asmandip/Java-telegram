@@ -1,4 +1,85 @@
 // server.js (Milestone C - integrated)
+// --- add near top after imports ---
+const { spawn } = require('child_process');
+const BacktestResult = require('./models/BacktestResult');
+const WORKERS = new Map(); // jobId -> child
+
+// --- API: run backtest ---
+app.post('/api/backtest/run', requireAuth, async (req, res) => {
+  try {
+    const body = req.body;
+    if (!body || !body.symbol || !body.strategy) return res.status(400).json({ error: 'symbol & strategy required' });
+    const job = {
+      jobName: body.jobName || `bt_${Date.now()}`,
+      symbol: body.symbol,
+      timeframe: body.timeframe || '3',
+      from: body.from || null,
+      to: body.to || null,
+      strategy: body.strategy,
+      params: body.params || {},
+      initialCapital: body.initialCapital || 1000,
+      force: !!body.force
+    };
+    // spawn worker
+    const worker = spawn(process.execPath, [path.join(__dirname, 'workers', 'backtestWorker.js')], {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    });
+
+    // message handler
+    worker.on('message', m => {
+      if (!m) return;
+      if (m.type === 'started') {
+        WORKERS.set(String(m.id), worker);
+      }
+      if (m.type === 'progress') {
+        io.emit('backtest:progress', { id: m.id || null, pct: m.pct, message: m.message });
+      }
+      if (m.type === 'done') {
+        io.emit('backtest:done', { id: m.id, summary: m.summary });
+      }
+      if (m.type === 'error') {
+        io.emit('backtest:error', { message: m.message });
+      }
+    });
+
+    worker.on('exit', (code, sig) => {
+      // clean up
+    });
+
+    // send run command
+    worker.send({ cmd: 'run', job });
+
+    // create initial queued DB doc
+    const doc = await BacktestResult.create({
+      jobName: job.jobName,
+      symbol: job.symbol,
+      timeframe: job.timeframe,
+      strategy: job.strategy,
+      params: job.params,
+      initialCapital: job.initialCapital,
+      status: 'running'
+    });
+
+    res.json({ ok: true, id: doc._id });
+  } catch (e) {
+    console.error('start backtest err', e);
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+// list and get endpoints
+app.get('/api/backtests', requireAuth, async (req, res) => {
+  const list = await BacktestResult.find().sort({ createdAt: -1 }).limit(200);
+  res.json(list);
+});
+app.get('/api/backtest/:id', requireAuth, async (req, res) => {
+  const id = req.params.id;
+  const doc = await BacktestResult.findById(id);
+  if (!doc) return res.status(404).json({ error: 'not found' });
+  res.json(doc);
+});
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
