@@ -1,43 +1,44 @@
-// server.js - main server (webhook-ready)
+// server.js - webhook-ready main server (Milestone A)
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const http = require('http');
+const { Server: IOServer } = require('socket.io');
 
 const app = express();
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const server = http.createServer(app);
+const io = new IOServer(server, { cors: { origin: '*' } });
+
 const PORT = process.env.PORT || 10000;
 
-// models
 const Signal = require('./models/Signal');
 const Settings = require('./models/Settings');
-
-// modules
 const botModule = require('./bot'); // exports { bot, sendCandidate }
-const bot = botModule?.bot;
-const scanner = require('./scanner'); // exports startScanner, stopScanner, isRunning
-const monitor = require('./monitor'); // exports monitorLoop
+const scanner = require('./scanner');
+const monitor = require('./monitor');
 
 // MongoDB connect
 async function connectDB() {
   const uri = process.env.MONGO_URI;
   if (!uri) {
-    console.error('MONGO_URI missing in .env — exiting.');
+    console.error('MONGO_URI not set. Exiting.');
     process.exit(1);
   }
   try {
     await mongoose.connect(uri);
     console.log('✅ MongoDB connected');
-  } catch (err) {
-    console.error('MongoDB connect error:', err);
+  } catch (e) {
+    console.error('MongoDB connection error:', e);
     process.exit(1);
   }
 }
 
-// ensure one settings doc
+// Ensure singleton settings
 async function ensureSettings() {
   try {
     const s = await Settings.findOne();
@@ -47,28 +48,33 @@ async function ensureSettings() {
       console.log('⚙️ Default settings created');
     }
   } catch (e) {
-    console.error('ensureSettings error:', e.message || e);
+    console.error('ensureSettings error:', e);
   }
 }
 
-// webhook route for Telegram (if bot created)
-if (bot) {
-  app.post(`/bot${process.env.TELEGRAM_TOKEN}`, (req, res) => {
-    try {
-      bot.processUpdate(req.body);
-      res.sendStatus(200);
-    } catch (e) {
-      console.error('bot.processUpdate error:', e);
-      res.sendStatus(500);
-    }
-  });
+// Webhook route (Telegram will POST updates here)
+if (botModule && botModule.bot) {
+  const token = process.env.TELEGRAM_TOKEN;
+  if (token) {
+    app.post(`/bot${token}`, (req, res) => {
+      try {
+        botModule.bot.processUpdate(req.body);
+        res.sendStatus(200);
+      } catch (e) {
+        console.error('bot.processUpdate error:', e);
+        res.sendStatus(500);
+      }
+    });
+  } else {
+    console.warn('TELEGRAM_TOKEN not set; webhook route not created.');
+  }
 }
 
-// scanner -> server candidate route
+// Signal candidate endpoint (scanner -> server)
 app.post('/signal-candidate', async (req, res) => {
   try {
     const cand = req.body;
-    if (!cand || !cand.symbol) return res.status(400).json({ error: 'invalid payload' });
+    if (!cand || !cand.symbol) return res.status(400).json({ error: 'invalid candidate' });
 
     const doc = await Signal.create({
       pair: cand.symbol || cand.pair,
@@ -81,22 +87,26 @@ app.post('/signal-candidate', async (req, res) => {
       createdAt: new Date()
     });
 
+    // emit realtime event
+    io.emit('signal:new', doc);
+
+    // notify Telegram
     if (botModule?.sendCandidate) {
-      try { await botModule.sendCandidate(doc); } catch (e) { console.error('sendCandidate err:', e); }
+      try { await botModule.sendCandidate(doc); } catch (e) { console.error('sendCandidate err', e); }
     }
     res.json({ ok: true, id: doc._id });
   } catch (e) {
-    console.error('/signal-candidate err:', e);
+    console.error('/signal-candidate error', e);
     res.status(500).json({ error: e.message || String(e) });
   }
 });
 
-// API endpoints (dashboard control)
+// API: status, signals, settings, control scanner
 app.get('/api/status', async (req, res) => {
   res.json({
     db: mongoose.connection.readyState === 1,
     scannerRunning: scanner.isRunning(),
-    webhook: !!bot,
+    webhook: !!(botModule && botModule.bot)
   });
 });
 
@@ -112,6 +122,7 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
   const updated = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
+  io.emit('settings:updated', updated);
   res.json(updated);
 });
 
@@ -119,33 +130,42 @@ app.post('/api/scan-toggle', async (req, res) => {
   const action = req.body?.action;
   if (action === 'start' || (!action && !scanner.isRunning())) {
     await scanner.startScanner();
+    io.emit('scanner:status', { running: true });
     return res.json({ ok: true, started: true });
   } else {
     await scanner.stopScanner();
+    io.emit('scanner:status', { running: false });
     return res.json({ ok: true, stopped: true });
   }
 });
 
-// Start server
+// socket.io connection
+io.on('connection', (socket) => {
+  console.log('socket connected', socket.id);
+  socket.on('ping', () => socket.emit('pong'));
+});
+
+// start sequence
 (async () => {
   await connectDB();
   await ensureSettings();
 
-  // start monitor loop (background)
+  // start monitor loop in background
   try {
-    monitor.monitorLoop().catch(e => console.error('monitorLoop error:', e));
+    monitor.monitorLoop().catch(err => console.error('monitorLoop error', err));
     console.log('✅ Position monitor started');
   } catch (e) {
-    console.warn('monitor start warning:', e.message || e);
+    console.warn('monitor start warning', e);
   }
 
-  // optionally auto-start scanner if env set
+  // optional auto-start scanner
   if (process.env.START_SCANNER === 'true') {
-    try { await scanner.startScanner(); console.log('Scanner auto-started from env'); } catch(e){}
+    await scanner.startScanner();
+    console.log('Scanner auto-started by env');
   }
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔗 Webhook route: /bot<TOKEN>`);
+    console.log(`🔗 Webhook route (if set): /bot<TOKEN>`);
   });
 })();
