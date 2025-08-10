@@ -1,62 +1,36 @@
 // strategies/registry.js
-// Simple strategy registry. Register modules and manage active strategy.
-
 const fs = require('fs');
 const path = require('path');
 const Settings = require('../models/Settings');
 
-const registry = {
-  strategies: {},    // name -> module
-  active: null
-};
+const registry = { strategies: {}, active: null };
 
-function register(name, mod) {
-  registry.strategies[name] = mod;
-}
-
-function list() {
-  return Object.keys(registry.strategies).map(name => ({
-    name,
-    info: registry.strategies[name].info || {}
-  }));
-}
+function register(name, mod) { registry.strategies[name] = mod; }
+function list() { return Object.keys(registry.strategies).map(n=>({ name:n, info: registry.strategies[n].info || {} })); }
+function getModule(name) { return registry.strategies[name]; }
+function getActive() { return registry.active; }
 
 async function activate(name) {
-  if (!registry.strategies[name]) throw new Error('strategy not found: ' + name);
+  if (!registry.strategies[name]) throw new Error('not found');
   registry.active = name;
-  // persist to Settings
-  try {
-    await Settings.findOneAndUpdate({}, { activeStrategy: name, lastUpdated: new Date() }, { upsert: true });
-  } catch (e) {
-    console.warn('Failed to persist active strategy:', e.message || e);
-  }
+  try { await Settings.findOneAndUpdate({}, { activeStrategy: name, lastUpdated: new Date() }, { upsert:true }); } catch(e){}
   return name;
 }
 
-function getActive() {
-  return registry.active;
-}
-
-function getModule(name) {
-  return registry.strategies[name];
-}
-
-// auto-load all files in this folder (except registry.js)
-function autoload(dir = __dirname) {
+function autoload(dir = path.join(__dirname)) {
   const files = fs.readdirSync(dir);
   for (const f of files) {
     if (f === 'registry.js') continue;
     if (!f.endsWith('.js')) continue;
-    const full = path.join(dir, f);
     try {
-      const mod = require(full);
+      const mod = require(path.join(dir, f));
       const name = mod.name || f.replace('.js','');
       register(name, mod);
       console.log('Strategy loaded:', name);
     } catch (e) {
-      console.error('Failed to load strategy', f, e.message || e);
+      console.error('Failed load strategy', f, e);
     }
   }
 }
 
-module.exports = { register, list, activate, getActive, getModule, autoload };
+module.exports = { register, list, activate, getModule, getActive, autoload };
