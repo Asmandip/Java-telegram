@@ -42,10 +42,11 @@ app.post(`/bot${TOKEN}`, (req, res) => {
     res.sendStatus(200);
 });
 
-// Pass bot, io to handlers
-botHandler(bot, io);
-monitor.start(io);
-scanner.init(io, bot);
+// botHandler(bot, io);
+// তারপর সরাসরি command handler রাখো
+bot.onText(/\/start/, msg => bot.sendMessage(msg.chat.id, '🤖 Bot is running!'));
+bot.onText(/\/status/, msg => bot.sendMessage(msg.chat.id, '📊 Bot status: ACTIVE'));
+bot.onText(/\/stop/, msg => bot.sendMessage(msg.chat.id, '⛔ Bot stopped'));
 
 // Dashboard Routes
 app.get('/', requireAuth, (req, res) => {
